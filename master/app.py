@@ -19,7 +19,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-import sys
 from fastapi import FastAPI
 import uvicorn
 
@@ -27,7 +26,7 @@ import uvicorn
 from shared.db_connector import get_db_connection # 这个仍然需要，因为 mysql_writer 内部使用了它
 from shared.redis_util import get_redis_client
 from master.weather_api import WeatherAPI
-from master.mysql_writer import MySQLWriter
+from shared.weather_dao import CurrentWeatherDAO, MinutelyForecastDAO, HourlyForecastDAO, DailyForecastDAO, WeatherAlertsDAO
 from master.redispub import publish_to_redis
 
 app = FastAPI()
@@ -59,8 +58,12 @@ MYSQL_DB = os.getenv("MYSQL_DB", "weather")
 REDIS_HOST = os.getenv("REDIS_HOST", "127.0.0.1")
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 
-# 实例化 MySQLWriter
-mysql_writer = MySQLWriter(MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB)
+# 实例化 DAO
+current_weather_dao = CurrentWeatherDAO(MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB)
+minutely_forecast_dao = MinutelyForecastDAO(MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB)
+hourly_forecast_dao = HourlyForecastDAO(MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB)
+daily_forecast_dao = DailyForecastDAO(MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB)
+weather_alerts_dao = WeatherAlertsDAO(MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB)
 
 # 实例化 WeatherAPI
 weather_api = WeatherAPI(API_KEY)
@@ -80,19 +83,19 @@ def main_loop():
 
             if current_weather:
                 print(f"采集到当前天气信息: {current_weather}")
-                mysql_writer.save_current_weather(current_weather)
+                current_weather_dao.insert(current_weather)
             if minutely_forecast:
                 print(f"采集到分钟级天气信息: {minutely_forecast}")
-                mysql_writer.save_minutely_forecast(minutely_forecast)
+                minutely_forecast_dao.insert(minutely_forecast)
             if hourly_forecast:
                 print(f"采集到小时级天气信息: {hourly_forecast}")
-                mysql_writer.save_hourly_forecast(hourly_forecast)
+                hourly_forecast_dao.insert(hourly_forecast)
             if daily_forecast:
                 print(f"采集到每日天气信息: {daily_forecast}")
-                mysql_writer.save_daily_forecast(daily_forecast)
+                daily_forecast_dao.insert(daily_forecast)
             if alerts:
                 print(f"采集到天气警报信息: {alerts}")
-                mysql_writer.save_weather_alerts(alerts)
+                weather_alerts_dao.insert(alerts)
 
             publish_to_redis(weather_data, REDIS_HOST, REDIS_PORT, REDIS_CHANNEL)
         except Exception as e:
