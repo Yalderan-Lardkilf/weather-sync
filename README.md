@@ -100,6 +100,30 @@ graph TD
        weather VARCHAR(100)
      );
      ```
+   - 新增 weather_current 表结构：
+     ```sql
+     CREATE TABLE weather_current (
+         id INT AUTO_INCREMENT PRIMARY KEY,
+         dt INT,
+         sunrise INT,
+         sunset INT,
+         temp FLOAT,
+         feels_like FLOAT,
+         pressure INT,
+         humidity INT,
+         dew_point FLOAT,
+         uvi FLOAT,
+         clouds INT,
+         visibility INT,
+         wind_speed FLOAT,
+         wind_deg INT,
+         wind_gust FLOAT,
+         weather_id INT,
+         weather_main VARCHAR(255),
+         weather_description VARCHAR(255),
+         weather_icon VARCHAR(255)
+     );
+     ```
    - SQLite 会自动创建(表结构类似)：
      ```sql
      CREATE TABLE weather_data (

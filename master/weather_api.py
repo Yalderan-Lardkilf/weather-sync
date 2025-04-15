@@ -45,14 +45,10 @@ class WeatherAPI:
             "lat": lat,
             "lon": lon,
             "appid": self.api_key,
-            "units": units,
-            "lang": lang
         }
-        
-        if exclude:
-            params["exclude"] = ",".join(exclude)
-            
-        response = requests.get(self.BASE_URL, params=params)
+        import urllib.parse
+        encoded_params = urllib.parse.urlencode(params)
+        response = requests.get(f"{self.BASE_URL}?{encoded_params}")
         response.raise_for_status()
         return response.json()
 
@@ -70,9 +66,9 @@ class WeatherAPI:
         返回:
             当前天气数据
         """
-        data = self.get_weather_data(lat, lon, 
-                                   exclude=["minutely", "hourly", "daily", "alerts"],
-                                   units=units, lang=lang)
+        data = self.get_weather_data(lat, lon,
+                                    exclude=["minutely", "hourly", "daily", "alerts"],
+                                    units=units, lang=lang)
         return data["current"]
 
     def get_minutely_forecast(self, lat: float, lon: float, 
