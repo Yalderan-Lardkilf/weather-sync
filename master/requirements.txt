@@ -1,8 +1,0 @@
-# master/requirements.txt
-
-# 主节点依赖库
-requests      # 用于调用天气API
-redis         # 用于Redis消息发布
-pymysql       # 用于MySQL数据存储
-
-# 后续可根据实际需求补充或指定版本号

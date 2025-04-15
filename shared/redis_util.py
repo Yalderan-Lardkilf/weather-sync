@@ -16,7 +16,21 @@ Redis工具类模块。
 【与FastAPI集成点】
 - 可作为依赖注入，供API路由实现消息发布/订阅等操作
 
-# 下面为Redis工具开发预留区
-# def get_redis_client():
-#     ...
+依赖说明：
+- 需先安装 redis 库
+- 连接参数（host, port）请通过环境变量或配置文件传递，切勿硬编码敏感信息
+
 """
+
+import redis
+
+def get_redis_client(host, port):
+    """
+    获取Redis客户端
+    参数说明：
+        host: Redis地址（如"127.0.0.1"或远程IP）
+        port: Redis端口（默认6379）
+    返回：
+        redis.Redis 对象
+    """
+    return redis.Redis(host=host, port=port, decode_responses=True)
