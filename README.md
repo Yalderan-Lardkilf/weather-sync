@@ -88,55 +88,187 @@ graph TD
 
 4. **初始化数据库表**
    - MySQL 执行：
+4. **初始化数据库表**
+   - MySQL 执行：
      ```sql
-     CREATE TABLE weather_data (
+     CREATE TABLE current_weather (
        id INT AUTO_INCREMENT PRIMARY KEY,
-       city VARCHAR(50) NOT NULL,
-       temperature FLOAT,
+       dt INT,
+       sunrise INT,
+       sunset INT,
+       temp FLOAT,
+       feels_like FLOAT,
+       pressure INT,
        humidity INT,
-       recorded_at TIMESTAMP,
-       lat FLOAT,
-       lon FLOAT,
-       weather VARCHAR(100)
-     );
-     ```
-   - 新增 weather_current 表结构：
-     ```sql
-     CREATE TABLE weather_current (
-         id INT AUTO_INCREMENT PRIMARY KEY,
-         dt INT,
-         sunrise INT,
-         sunset INT,
-         temp FLOAT,
-         feels_like FLOAT,
-         pressure INT,
-         humidity INT,
-         dew_point FLOAT,
-         uvi FLOAT,
-         clouds INT,
-         visibility INT,
-         wind_speed FLOAT,
-         wind_deg INT,
-         wind_gust FLOAT,
-         weather_id INT,
-         weather_main VARCHAR(255),
-         weather_description VARCHAR(255),
-         weather_icon VARCHAR(255)
+       dew_point FLOAT,
+       uvi FLOAT,
+       clouds INT,
+       visibility INT,
+       wind_speed FLOAT,
+       wind_deg INT,
+       wind_gust FLOAT,
+       weather_id INT,
+       weather_main VARCHAR(255),
+       weather_description VARCHAR(255),
+       weather_icon VARCHAR(255)
      );
      ```
    - SQLite 会自动创建(表结构类似)：
      ```sql
-     CREATE TABLE weather_data (
+     CREATE TABLE current_weather (
        id INTEGER PRIMARY KEY AUTOINCREMENT,
-       city TEXT NOT NULL,
-       temperature REAL,
+       dt INT,
+       sunrise INT,
+       sunset INT,
+       temp REAL,
+       feels_like REAL,
+       pressure INTEGER,
        humidity INTEGER,
-       recorded_at TEXT,
-       lat REAL,
-       lon REAL,
-       weather TEXT
+       dew_point REAL,
+       uvi REAL,
+       clouds INTEGER,
+       visibility INTEGER,
+       wind_speed REAL,
+       wind_deg INTEGER,
+       wind_gust REAL,
+       weather_id INTEGER,
+       weather_main TEXT,
+       weather_description TEXT,
+       weather_icon TEXT
      );
      ```
+
+---
+
+## 数据库表结构
+
+### `current_weather` (MySQL)
+```sql
+CREATE TABLE current_weather (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  dt INT,
+  sunrise INT,
+  sunset INT,
+  temp FLOAT,
+  feels_like FLOAT,
+  pressure INT,
+  humidity INT,
+  dew_point FLOAT,
+  uvi FLOAT,
+  clouds INT,
+  visibility INT,
+  wind_speed FLOAT,
+  wind_deg INT,
+  wind_gust FLOAT,
+  weather_id INT,
+  weather_main VARCHAR(255),
+  weather_description VARCHAR(255),
+  weather_icon VARCHAR(255)
+);
+```
+
+### `current_weather` (SQLite)
+```sql
+CREATE TABLE current_weather (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  dt INT,
+  sunrise INT,
+  sunset INT,
+  temp REAL,
+  feels_like REAL,
+  pressure INTEGER,
+  humidity INTEGER,
+  dew_point REAL,
+  uvi REAL,
+  clouds INTEGER,
+  visibility INTEGER,
+  wind_speed REAL,
+  wind_deg INTEGER,
+  wind_gust REAL,
+  weather_id INTEGER,
+  weather_main TEXT,
+  weather_description TEXT,
+  weather_icon TEXT
+);
+```
+
+### `minutely_forecast` (MySQL)
+```sql
+CREATE TABLE minutely_forecast (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  dt INT NOT NULL,
+  precipitation FLOAT,
+  recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### `hourly_forecast` (MySQL)
+```sql
+CREATE TABLE hourly_forecast (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  dt INT NOT NULL,
+  temperature FLOAT,
+  feels_like FLOAT,
+  pressure INT,
+  humidity INT,
+  wind_speed FLOAT,
+  wind_deg INT,
+  clouds INT,
+  pop FLOAT,
+  weather VARCHAR(100),
+  recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### `daily_forecast` (MySQL)
+```sql
+CREATE TABLE daily_forecast (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  dt INT NOT NULL,
+  sunrise INT,
+  sunset INT,
+  moonrise INT,
+  moonset INT,
+  moon_phase FLOAT,
+  summary VARCHAR(255),
+  temp_day FLOAT,
+  temp_min FLOAT,
+  temp_max FLOAT,
+  temp_night FLOAT,
+  temp_eve FLOAT,
+  temp_morn FLOAT,
+  feels_like_day FLOAT,
+  feels_like_night FLOAT,
+  feels_like_eve FLOAT,
+  feels_like_morn FLOAT,
+  pressure INT,
+  humidity INT,
+  wind_speed FLOAT,
+  wind_deg INT,
+  clouds INT,
+  pop FLOAT,
+  rain FLOAT,
+  uvi FLOAT,
+  weather VARCHAR(100),
+  recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### `weather_alerts` (MySQL)
+```sql
+CREATE TABLE weather_alerts (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  sender_name VARCHAR(255),
+  event VARCHAR(255),
+  start INT,
+  end INT,
+  description TEXT,
+  tags TEXT,
+  recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+---
 
 5. **启动主节点**
    ```bash
