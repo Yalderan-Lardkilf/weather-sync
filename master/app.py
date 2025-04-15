@@ -54,6 +54,19 @@ MYSQL_USER = os.getenv("MYSQL_USER")
 MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD")
 MYSQL_DB = os.getenv("MYSQL_DB", "weather")
 
+# 初始化MySQL连接池
+from shared.db_connector import init_mysql_pool
+init_mysql_pool(
+    host=MYSQL_HOST,
+    port=MYSQL_PORT,
+    user=MYSQL_USER,
+    password=MYSQL_PASSWORD,
+    db=MYSQL_DB,
+    mincached=2,
+    maxcached=5,
+    maxconnections=20
+)
+
 # Redis连接参数说明
 REDIS_HOST = os.getenv("REDIS_HOST", "127.0.0.1")
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
@@ -74,30 +87,39 @@ def main_loop():
     while True:
         # 使用新的 fetch_weather_by_coords 函数
         try:
+            logging.info("开始采集天气数据...")
             weather_data = weather_api.get_weather_data(float(LAT), float(LON))
             current_weather = weather_data["current"]
             minutely_forecast = weather_data.get("minutely", [])
             hourly_forecast = weather_data["hourly"]
             daily_forecast = weather_data["daily"]
             alerts = weather_data.get("alerts", [])
+            logging.info("天气数据采集完成。")
 
             if current_weather:
-                print(f"采集到当前天气信息: {current_weather}")
+                logging.info("开始保存当前天气数据...")
                 current_weather_dao.insert(current_weather)
+                logging.info("当前天气数据已保存。")
             if minutely_forecast:
-                print(f"采集到分钟级天气信息: {minutely_forecast}")
+                logging.info("开始保存分钟级天气数据...")
                 minutely_forecast_dao.insert(minutely_forecast)
+                logging.info("分钟级天气数据已保存。")
             if hourly_forecast:
-                print(f"采集到小时级天气信息: {hourly_forecast}")
+                logging.info("开始保存小时级天气数据...")
                 hourly_forecast_dao.insert(hourly_forecast)
+                logging.info("小时级天气数据已保存。")
             if daily_forecast:
-                print(f"采集到每日天气信息: {daily_forecast}")
+                logging.info("开始保存每日天气数据...")
                 daily_forecast_dao.insert(daily_forecast)
+                logging.info("每日天气数据已保存。")
             if alerts:
-                print(f"采集到天气警报信息: {alerts}")
+                logging.info("开始保存天气警报数据...")
                 weather_alerts_dao.insert(alerts)
+                logging.info("天气警报数据已保存。")
 
+            logging.info("开始发布天气数据到Redis...")
             publish_to_redis(weather_data, REDIS_HOST, REDIS_PORT, REDIS_CHANNEL)
+            logging.info("天气数据已发布到Redis。")
         except Exception as e:
             logging.error(f"采集或存储天气数据失败: {e}")
         time.sleep(60)  # 每60秒采集一次

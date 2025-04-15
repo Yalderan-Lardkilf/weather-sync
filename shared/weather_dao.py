@@ -5,7 +5,9 @@ shared/weather_dao.py
 """
 
 import logging
-from shared.db_connector import get_db_connection
+from dbutils.pooled_db import PooledDBError
+import pymysql
+from pymysql import MySQLError, OperationalError, ProgrammingError, InternalError
 
 class BaseWeatherDAO:
     """
@@ -23,9 +25,23 @@ class BaseWeatherDAO:
         """
         获取数据库连接。
         """
+        from shared.db_connector import get_db_connection
         return get_db_connection(
-            host=self.MYSQL_HOST, port=self.MYSQL_PORT, user=self.MYSQL_USER, password=self.MYSQL_PASSWORD, db=self.MYSQL_DB
+            host=self.MYSQL_HOST, port=self.MYSQL_PORT, 
+            user=self.MYSQL_USER, password=self.MYSQL_PASSWORD, 
+            db=self.MYSQL_DB
         )
+
+    def _log_db_error(self, e, operation):
+        """记录详细的数据库错误日志"""
+        error_details = {
+            'operation': operation,
+            'error_type': type(e).__name__,
+            'error_code': getattr(e, 'args', (None,))[0],
+            'error_msg': str(e),
+            'table': self.table_name
+        }
+        logging.error(f"数据库操作失败: {error_details}", exc_info=True)
 
 class CurrentWeatherDAO(BaseWeatherDAO):
     """
@@ -38,6 +54,7 @@ class CurrentWeatherDAO(BaseWeatherDAO):
         """
         插入当前天气数据。
         """
+        conn = None
         try:
             conn = self.get_connection()
             with conn.cursor() as cursor:
@@ -67,12 +84,35 @@ class CurrentWeatherDAO(BaseWeatherDAO):
                 )
                 cursor.execute(sql, params)
             conn.commit()
-            conn.close()
             logging.info("当前天气数据已写入MySQL")
             return True
-        except Exception as e:
-            logging.error(f"MySQL写入失败: {e}")
-            return False
+            
+        except OperationalError as e:
+            self._log_db_error(e, "insert_current_weather")
+            if conn:
+                conn.rollback()
+            raise ConnectionError("数据库连接错误，请检查网络或数据库状态") from e
+        except ProgrammingError as e:
+            self._log_db_error(e, "insert_current_weather")
+            if conn:
+                conn.rollback()
+            raise ValueError("SQL语句或参数错误") from e
+        except InternalError as e:
+            self._log_db_error(e, "insert_current_weather")
+            if conn:
+                conn.rollback()
+            raise RuntimeError("数据库内部错误") from e
+        except PooledDBError as e:
+            self._log_db_error(e, "insert_current_weather")
+            raise ConnectionError("连接池资源耗尽") from e
+        except MySQLError as e:
+            self._log_db_error(e, "insert_current_weather")
+            if conn:
+                conn.rollback()
+            raise RuntimeError("数据库操作失败") from e
+        finally:
+            if conn:
+                conn.close()
 
 class MinutelyForecastDAO(BaseWeatherDAO):
     """
@@ -85,6 +125,7 @@ class MinutelyForecastDAO(BaseWeatherDAO):
         """
         插入分钟级天气数据。
         """
+        conn = None
         try:
             conn = self.get_connection()
             with conn.cursor() as cursor:
@@ -92,19 +133,38 @@ class MinutelyForecastDAO(BaseWeatherDAO):
                 INSERT INTO minutely_forecast (dt, precipitation)
                 VALUES (%s, %s)
                 """
-                for minute in forecast_data:
-                    params = (
-                        minute["dt"],
-                        minute["precipitation"],
-                    )
-                    cursor.execute(sql, params)
+                params = [(minute["dt"], minute["precipitation"]) for minute in forecast_data]
+                cursor.executemany(sql, params)
             conn.commit()
-            conn.close()
             logging.info("分钟级天气数据已写入MySQL")
             return True
-        except Exception as e:
-            logging.error(f"MySQL写入失败: {e}")
-            return False
+            
+        except OperationalError as e:
+            self._log_db_error(e, "insert_minutely_forecast")
+            if conn:
+                conn.rollback()
+            raise ConnectionError("数据库连接错误，请检查网络或数据库状态") from e
+        except ProgrammingError as e:
+            self._log_db_error(e, "insert_minutely_forecast")
+            if conn:
+                conn.rollback()
+            raise ValueError("SQL语句或参数错误") from e
+        except InternalError as e:
+            self._log_db_error(e, "insert_minutely_forecast")
+            if conn:
+                conn.rollback()
+            raise RuntimeError("数据库内部错误") from e
+        except PooledDBError as e:
+            self._log_db_error(e, "insert_minutely_forecast")
+            raise ConnectionError("连接池资源耗尽") from e
+        except MySQLError as e:
+            self._log_db_error(e, "insert_minutely_forecast")
+            if conn:
+                conn.rollback()
+            raise RuntimeError("数据库操作失败") from e
+        finally:
+            if conn:
+                conn.close()
 
 class HourlyForecastDAO(BaseWeatherDAO):
     """
@@ -117,6 +177,7 @@ class HourlyForecastDAO(BaseWeatherDAO):
         """
         插入小时级天气数据。
         """
+        conn = None
         try:
             conn = self.get_connection()
             with conn.cursor() as cursor:
@@ -124,27 +185,49 @@ class HourlyForecastDAO(BaseWeatherDAO):
                 INSERT INTO hourly_forecast (dt, temperature, feels_like, pressure, humidity, wind_speed, wind_deg, clouds, pop, weather)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
-                for hour in forecast_data:
-                    params = (
-                        hour["dt"],
-                        hour["temp"],
-                        hour["feels_like"],
-                        hour["pressure"],
-                        hour["humidity"],
-                        hour["wind_speed"],
-                        hour["wind_deg"],
-                        hour["clouds"],
-                        hour["pop"],
-                        hour["weather"][0]["main"] if hour["weather"] else None,
-                    )
-                    cursor.execute(sql, params)
+                params = [(
+                    hour["dt"],
+                    hour["temp"],
+                    hour["feels_like"],
+                    hour["pressure"],
+                    hour["humidity"],
+                    hour["wind_speed"],
+                    hour["wind_deg"],
+                    hour["clouds"],
+                    hour["pop"],
+                    hour["weather"][0]["main"] if hour["weather"] else None,
+                ) for hour in forecast_data]
+                cursor.executemany(sql, params)
             conn.commit()
-            conn.close()
             logging.info("小时级天气数据已写入MySQL")
             return True
-        except Exception as e:
-            logging.error(f"MySQL写入失败: {e}")
-            return False
+            
+        except OperationalError as e:
+            self._log_db_error(e, "insert_hourly_forecast")
+            if conn:
+                conn.rollback()
+            raise ConnectionError("数据库连接错误，请检查网络或数据库状态") from e
+        except ProgrammingError as e:
+            self._log_db_error(e, "insert_hourly_forecast")
+            if conn:
+                conn.rollback()
+            raise ValueError("SQL语句或参数错误") from e
+        except InternalError as e:
+            self._log_db_error(e, "insert_hourly_forecast")
+            if conn:
+                conn.rollback()
+            raise RuntimeError("数据库内部错误") from e
+        except PooledDBError as e:
+            self._log_db_error(e, "insert_hourly_forecast")
+            raise ConnectionError("连接池资源耗尽") from e
+        except MySQLError as e:
+            self._log_db_error(e, "insert_hourly_forecast")
+            if conn:
+                conn.rollback()
+            raise RuntimeError("数据库操作失败") from e
+        finally:
+            if conn:
+                conn.close()
 
 class DailyForecastDAO(BaseWeatherDAO):
     """
@@ -157,6 +240,7 @@ class DailyForecastDAO(BaseWeatherDAO):
         """
         插入每日天气数据。
         """
+        conn = None
         try:
             conn = self.get_connection()
             with conn.cursor() as cursor:
@@ -164,43 +248,65 @@ class DailyForecastDAO(BaseWeatherDAO):
                 INSERT INTO daily_forecast (dt, sunrise, sunset, moonrise, moonset, moon_phase, summary, temp_day, temp_min, temp_max, temp_night, temp_eve, temp_morn, feels_like_day, feels_like_night, feels_like_eve, feels_like_morn, pressure, humidity, wind_speed, wind_deg, clouds, pop, rain, uvi, weather)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
-                for day in forecast_data:
-                    params = (
-                        day["dt"],
-                        day["sunrise"],
-                        day["sunset"],
-                        day["moonrise"],
-                        day["moonset"],
-                        day["moon_phase"],
-                        day["summary"],
-                        day["temp"]["day"],
-                        day["temp"]["min"],
-                        day["temp"]["max"],
-                        day["temp"]["night"],
-                        day["temp"]["eve"],
-                        day["temp"]["morn"],
-                        day["feels_like"]["day"],
-                        day["feels_like"]["night"],
-                        day["feels_like"]["eve"],
-                        day["feels_like"]["morn"],
-                        day["pressure"],
-                        day["humidity"],
-                        day["wind_speed"],
-                        day["wind_deg"],
-                        day["clouds"],
-                        day["pop"],
-                        day.get("rain", 0),
-                        day["uvi"],
-                        day["weather"][0]["main"] if day["weather"] else None,
-                    )
-                    cursor.execute(sql, params)
+                params = [(
+                    day["dt"],
+                    day["sunrise"],
+                    day["sunset"],
+                    day["moonrise"],
+                    day["moonset"],
+                    day["moon_phase"],
+                    day["summary"],
+                    day["temp"]["day"],
+                    day["temp"]["min"],
+                    day["temp"]["max"],
+                    day["temp"]["night"],
+                    day["temp"]["eve"],
+                    day["temp"]["morn"],
+                    day["feels_like"]["day"],
+                    day["feels_like"]["night"],
+                    day["feels_like"]["eve"],
+                    day["feels_like"]["morn"],
+                    day["pressure"],
+                    day["humidity"],
+                    day["wind_speed"],
+                    day["wind_deg"],
+                    day["clouds"],
+                    day["pop"],
+                    day.get("rain", 0),
+                    day["uvi"],
+                    day["weather"][0]["main"] if day["weather"] else None,
+                ) for day in forecast_data]
+                cursor.executemany(sql, params)
             conn.commit()
-            conn.close()
             logging.info("每日天气数据已写入MySQL")
             return True
-        except Exception as e:
-            logging.error(f"MySQL写入失败: {e}")
-            return False
+            
+        except OperationalError as e:
+            self._log_db_error(e, "insert_daily_forecast")
+            if conn:
+                conn.rollback()
+            raise ConnectionError("数据库连接错误，请检查网络或数据库状态") from e
+        except ProgrammingError as e:
+            self._log_db_error(e, "insert_daily_forecast")
+            if conn:
+                conn.rollback()
+            raise ValueError("SQL语句或参数错误") from e
+        except InternalError as e:
+            self._log_db_error(e, "insert_daily_forecast")
+            if conn:
+                conn.rollback()
+            raise RuntimeError("数据库内部错误") from e
+        except PooledDBError as e:
+            self._log_db_error(e, "insert_daily_forecast")
+            raise ConnectionError("连接池资源耗尽") from e
+        except MySQLError as e:
+            self._log_db_error(e, "insert_daily_forecast")
+            if conn:
+                conn.rollback()
+            raise RuntimeError("数据库操作失败") from e
+        finally:
+            if conn:
+                conn.close()
 
 class WeatherAlertsDAO(BaseWeatherDAO):
     """
@@ -213,6 +319,7 @@ class WeatherAlertsDAO(BaseWeatherDAO):
         """
         插入天气警报数据。
         """
+        conn = None
         try:
             conn = self.get_connection()
             with conn.cursor() as cursor:
@@ -220,20 +327,49 @@ class WeatherAlertsDAO(BaseWeatherDAO):
                 INSERT INTO weather_alerts (sender_name, event, start, end, description, tags)
                 VALUES (%s, %s, %s, %s, %s, %s)
                 """
-                for alert in alert_data:
-                    params = (
-                        alert["sender_name"],
-                        alert["event"],
-                        alert["start"],
-                        alert["end"],
-                        alert["description"],
-                        ",".join(alert["tags"]) if alert["tags"] else None,
-                    )
-                    cursor.execute(sql, params)
+                params = [(
+                    alert["sender_name"],
+                    alert["event"],
+                    alert["start"],
+                    alert["end"],
+                    alert["description"],
+                    ",".join(alert["tags"]) if alert["tags"] else None,
+                ) for alert in alert_data]
+                cursor.executemany(sql, params)
             conn.commit()
-            conn.close()
             logging.info("天气警报数据已写入MySQL")
             return True
-        except Exception as e:
-            logging.error(f"MySQL写入失败: {e}")
-            return False
+            
+        except OperationalError as e:
+            self._log_db_error(e, "insert_weather_alerts")
+            if conn:
+                conn.rollback()
+            raise ConnectionError("数据库连接错误，请检查网络或数据库状态") from e
+        except ProgrammingError as e:
+            self._log_db_error(e, "insert_weather_alerts")
+            if conn:
+                conn.rollback()
+            raise ValueError("SQL语句或参数错误") from e
+        except InternalError as e:
+            self._log_db_error(e, "insert_weather_alerts")
+            if conn:
+                conn.rollback()
+            raise RuntimeError("数据库内部错误") from e
+        except PooledDBError as e:
+            self._log_db_error(e, "insert_weather_alerts")
+            raise ConnectionError("连接池资源耗尽") from e
+        except MySQLError as e:
+            self._log_db_error(e, "insert_weather_alerts")
+            if conn:
+                conn.rollback()
+            raise RuntimeError("数据库操作失败") from e
+        finally:
+            if conn:
+                conn.close()
+
+def check_pool_status():
+    """
+    检查连接池状态
+    """
+    from shared.db_connector import pool_status
+    return pool_status()
