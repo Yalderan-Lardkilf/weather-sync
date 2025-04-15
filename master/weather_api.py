@@ -1,66 +1,171 @@
 """
 master/weather_api.py
 
-处理不同格式的 OpenWeatherMap API 调用。
+OpenWeatherMap API 接口封装，提供天气数据查询功能。
 """
 
-import logging
-from datetime import datetime, UTC
+import os
 import requests
+from typing import Optional, Dict, List
 
-# OpenWeatherMap API URL 模板
-API_URL_BY_COORDS = "https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={key}&units=metric"
-# 可以根据需要添加其他格式的 URL 模板，例如按城市名查询
-# API_URL_BY_CITY = "https://api.openweathermap.org/data/2.5/weather?q={city}&appid={key}&units=metric"
-
-def fetch_weather_by_coords(lat, lon, api_key):
+class WeatherAPI:
     """
-    通过经纬度调用外部天气API，返回标准化天气数据。
-
-    参数:
-        lat (str): 纬度
-        lon (str): 经度
-        api_key (str): OpenWeatherMap API key
-
-    返回:
-        dict: 标准化天气数据，包含 timestamp, city, lat, lon, temp, humidity, weather
-        None: 获取失败时返回 None
+    OpenWeatherMap API 封装类，提供各种天气数据查询功能。
     """
-    if not all([lat, lon, api_key]):
-        logging.error("获取天气数据失败: 缺少经纬度或 API Key")
-        return None
+    
+    BASE_URL = "https://api.openweathermap.org/data/3.0/onecall"
+    
+    def __init__(self, api_key: str = None):
+        """
+        初始化 WeatherAPI
+        
+        参数:
+            api_key: OpenWeatherMap API key，如果为None则从环境变量获取
+        """
+        self.api_key = api_key or os.getenv("WEATHER_API_KEY")
+        if not self.api_key:
+            raise ValueError("API key must be provided or set in WEATHER_API_KEY environment variable")
 
-    url = API_URL_BY_COORDS.format(lat=lat, lon=lon, key=api_key)
-    try:
-        resp = requests.get(url, timeout=10) # 增加超时时间
-        resp.raise_for_status() # 检查 HTTP 错误状态码
-        data = resp.json()
-
-        # 检查返回数据是否完整
-        if "coord" not in data or "main" not in data:
-             logging.error(f"API 返回数据不完整: {data}")
-             return None
-
-        # 格式化时间为 MySQL 支持的格式
-        recorded_at = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
-
-        return {
-            "timestamp": recorded_at,
-            "city": data.get("name", f"Coords_{lat}_{lon}"), # 如果没有城市名，用坐标代替
-            "lat": data["coord"]["lat"],
-            "lon": data["coord"]["lon"],
-            "temp": data["main"]["temp"],
-            "humidity": data["main"]["humidity"],
-            "weather": data["weather"][0]["description"] if data.get("weather") else "N/A" # 处理 weather 字段可能不存在的情况
+    def get_weather_data(self, lat: float, lon: float, exclude: List[str] = None, 
+                        units: str = "metric", lang: str = "zh_cn") -> Dict:
+        """
+        获取综合天气数据
+        
+        参数:
+            lat: 纬度
+            lon: 经度
+            exclude: 要排除的数据部分(current,minutely,hourly,daily,alerts)
+            units: 单位制(metric/imperial/standard)
+            lang: 语言代码
+            
+        返回:
+            天气数据字典
+        """
+        params = {
+            "lat": lat,
+            "lon": lon,
+            "appid": self.api_key,
+            "units": units,
+            "lang": lang
         }
-    except requests.exceptions.RequestException as e:
-        logging.error(f"获取天气数据网络请求失败: {e}")
-        return None
-    except Exception as e:
-        logging.error(f"处理天气数据时发生未知错误: {e}")
-        return None
+        
+        if exclude:
+            params["exclude"] = ",".join(exclude)
+            
+        response = requests.get(self.BASE_URL, params=params)
+        response.raise_for_status()
+        return response.json()
 
-# 可以根据需要添加其他 fetch 函数，例如按城市名查询
-# def fetch_weather_by_city(city, api_key):
-#     # ... 实现按城市名查询的逻辑 ...
-#     pass
+    def get_current_weather(self, lat: float, lon: float, 
+                          units: str = "metric", lang: str = "zh_cn") -> Dict:
+        """
+        获取当前天气数据
+        
+        参数:
+            lat: 纬度
+            lon: 经度
+            units: 单位制
+            lang: 语言代码
+            
+        返回:
+            当前天气数据
+        """
+        data = self.get_weather_data(lat, lon, 
+                                   exclude=["minutely", "hourly", "daily", "alerts"],
+                                   units=units, lang=lang)
+        return data["current"]
+
+    def get_minutely_forecast(self, lat: float, lon: float, 
+                            units: str = "metric", lang: str = "zh_cn") -> List[Dict]:
+        """
+        获取分钟级降水预报
+        
+        参数:
+            lat: 纬度
+            lon: 经度
+            units: 单位制
+            lang: 语言代码
+            
+        返回:
+            分钟级降水预报列表
+        """
+        data = self.get_weather_data(lat, lon, 
+                                   exclude=["current", "hourly", "daily", "alerts"],
+                                   units=units, lang=lang)
+        return data["minutely"]
+
+    def get_hourly_forecast(self, lat: float, lon: float, 
+                          units: str = "metric", lang: str = "zh_cn") -> List[Dict]:
+        """
+        获取小时级天气预报
+        
+        参数:
+            lat: 纬度
+            lon: 经度
+            units: 单位制
+            lang: 语言代码
+            
+        返回:
+            小时级天气预报列表
+        """
+        data = self.get_weather_data(lat, lon, 
+                                   exclude=["current", "minutely", "daily", "alerts"],
+                                   units=units, lang=lang)
+        return data["hourly"]
+
+    def get_daily_forecast(self, lat: float, lon: float, 
+                         units: str = "metric", lang: str = "zh_cn") -> List[Dict]:
+        """
+        获取每日天气预报
+        
+        参数:
+            lat: 纬度
+            lon: 经度
+            units: 单位制
+            lang: 语言代码
+            
+        返回:
+            每日天气预报列表
+        """
+        data = self.get_weather_data(lat, lon, 
+                                   exclude=["current", "minutely", "hourly", "alerts"],
+                                   units=units, lang=lang)
+        return data["daily"]
+
+    def get_weather_alerts(self, lat: float, lon: float, 
+                         units: str = "metric", lang: str = "zh_cn") -> List[Dict]:
+        """
+        获取天气警报
+        
+        参数:
+            lat: 纬度
+            lon: 经度
+            units: 单位制
+            lang: 语言代码
+            
+        返回:
+            天气警报列表
+        """
+        data = self.get_weather_data(lat, lon, 
+                                   exclude=["current", "minutely", "hourly", "daily"],
+                                   units=units, lang=lang)
+        return data.get("alerts", [])
+
+    @staticmethod
+    def format_temperature(temp: float, units: str) -> str:
+        """
+        格式化温度显示
+        
+        参数:
+            temp: 温度值
+            units: 单位制
+            
+        返回:
+            格式化后的温度字符串
+        """
+        if units == "metric":
+            return f"{temp}°C"
+        elif units == "imperial":
+            return f"{temp}°F"
+        else:
+            return f"{temp}K"
