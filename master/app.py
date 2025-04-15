@@ -19,14 +19,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+import sys
 from fastapi import FastAPI
 import uvicorn
 
 # 更新导入语句
 from shared.db_connector import get_db_connection # 这个仍然需要，因为 mysql_writer 内部使用了它
 from shared.redis_util import get_redis_client
-from master.weather_api import fetch_weather_by_coords # 使用新模块名
-from master.mysql_writer import save_to_mysql # 使用新模块名
+from master.weather_api import WeatherAPI
+from master.mysql_writer import MySQLWriter
 from master.redispub import publish_to_redis
 
 app = FastAPI()
@@ -58,17 +59,44 @@ MYSQL_DB = os.getenv("MYSQL_DB", "weather")
 REDIS_HOST = os.getenv("REDIS_HOST", "127.0.0.1")
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 
+# 实例化 MySQLWriter
+mysql_writer = MySQLWriter(MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB)
+
+# 实例化 WeatherAPI
+weather_api = WeatherAPI(API_KEY)
+
 
 def main_loop():
     """主循环：定时采集、存储、发布"""
     while True:
         # 使用新的 fetch_weather_by_coords 函数
-        weather = fetch_weather_by_coords(LAT, LON, API_KEY)
-        if weather:
-            print(f"采集到天气信息: {weather}")
-            # 使用新的 save_to_mysql 和 publish_to_redis 函数
-            save_to_mysql(weather, MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB)
-            publish_to_redis(weather, REDIS_HOST, REDIS_PORT, REDIS_CHANNEL)
+        try:
+            weather_data = weather_api.get_weather_data(float(LAT), float(LON))
+            current_weather = weather_data["current"]
+            minutely_forecast = weather_data.get("minutely", [])
+            hourly_forecast = weather_data["hourly"]
+            daily_forecast = weather_data["daily"]
+            alerts = weather_data.get("alerts", [])
+
+            if current_weather:
+                print(f"采集到当前天气信息: {current_weather}")
+                mysql_writer.save_current_weather(current_weather)
+            if minutely_forecast:
+                print(f"采集到分钟级天气信息: {minutely_forecast}")
+                mysql_writer.save_minutely_forecast(minutely_forecast)
+            if hourly_forecast:
+                print(f"采集到小时级天气信息: {hourly_forecast}")
+                mysql_writer.save_hourly_forecast(hourly_forecast)
+            if daily_forecast:
+                print(f"采集到每日天气信息: {daily_forecast}")
+                mysql_writer.save_daily_forecast(daily_forecast)
+            if alerts:
+                print(f"采集到天气警报信息: {alerts}")
+                mysql_writer.save_weather_alerts(alerts)
+
+            publish_to_redis(weather_data, REDIS_HOST, REDIS_PORT, REDIS_CHANNEL)
+        except Exception as e:
+            logging.error(f"采集或存储天气数据失败: {e}")
         time.sleep(60)  # 每60秒采集一次
 
 

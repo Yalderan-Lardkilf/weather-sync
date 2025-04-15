@@ -5,74 +5,82 @@ master/mysql_writer.py
 """
 
 import logging
-from shared.db_connector import get_db_connection
+from shared.weather_dao import CurrentWeatherDAO, MinutelyForecastDAO, HourlyForecastDAO, DailyForecastDAO, WeatherAlertsDAO
 
-def save_to_mysql(weather_data, MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB):
-    """将当前天气数据写入MySQL"""
-    try:
-        conn = get_db_connection(
-            host=MYSQL_HOST, port=MYSQL_PORT, user=MYSQL_USER, password=MYSQL_PASSWORD, db=MYSQL_DB
-        )
-        with conn.cursor() as cursor:
-            # 创建表如果不存在
-            cursor.execute("""
-            CREATE TABLE IF NOT EXISTS weather_current (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                dt INT,
-                sunrise INT,
-                sunset INT,
-                temp FLOAT,
-                feels_like FLOAT,
-                pressure INT,
-                humidity INT,
-                dew_point FLOAT,
-                uvi FLOAT,
-                clouds INT,
-                visibility INT,
-                wind_speed FLOAT,
-                wind_deg INT,
-                wind_gust FLOAT,
-                weather_id INT,
-                weather_main VARCHAR(255),
-                weather_description VARCHAR(255),
-                weather_icon VARCHAR(255)
-            )
-            """)
+class MySQLWriter:
+    def __init__(self, MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB):
+        self.MYSQL_HOST = MYSQL_HOST
+        self.MYSQL_PORT = MYSQL_PORT
+        self.MYSQL_USER = MYSQL_USER
+        self.MYSQL_PASSWORD = MYSQL_PASSWORD
+        self.MYSQL_DB = MYSQL_DB
+        self.current_weather_dao = CurrentWeatherDAO(MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB)
+        self.minutely_forecast_dao = MinutelyForecastDAO(MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB)
+        self.hourly_forecast_dao = HourlyForecastDAO(MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB)
+        self.daily_forecast_dao = DailyForecastDAO(MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB)
+        self.weather_alerts_dao = WeatherAlertsDAO(MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB)
 
-            sql = """
-            INSERT INTO weather_current (dt, sunrise, sunset, temp, feels_like, pressure, humidity, dew_point, uvi, clouds, visibility, wind_speed, wind_deg, wind_gust, weather_id, weather_main, weather_description, weather_icon)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """
-            
-            current = weather_data["current"]
-            weather = current["weather"][0]
-            cursor.execute(
-                sql,
-                (
-                    current["dt"],
-                    current["sunrise"],
-                    current["sunset"],
-                    current["temp"],
-                    current["feels_like"],
-                    current["pressure"],
-                    current["humidity"],
-                    current["dew_point"],
-                    current["uvi"],
-                    current["clouds"],
-                    current["visibility"],
-                    current["wind_speed"],
-                    current["wind_deg"],
-                    current["wind_gust"],
-                    weather["id"],
-                    weather["main"],
-                    weather["description"],
-                    weather["icon"],
-                ),
-            )
-        conn.commit()
-        conn.close()
-        logging.info("当前天气数据已写入MySQL")
-        return True
-    except Exception as e:
-        logging.error(f"MySQL写入失败: {e}")
-        return False
+    def save_current_weather(self, weather_data):
+        """将当前天气数据写入MySQL"""
+        try:
+            if self.current_weather_dao.insert(weather_data):
+                logging.info("当前天气数据已写入MySQL")
+                return True
+            else:
+                logging.error("当前天气数据写入MySQL失败")
+                return False
+        except Exception as e:
+            logging.error(f"MySQL写入失败: {e}")
+            return False
+
+    def save_minutely_forecast(self, forecast_data):
+        """将分钟级天气数据写入MySQL"""
+        try:
+            if self.minutely_forecast_dao.insert(forecast_data):
+                logging.info("分钟级天气数据已写入MySQL")
+                return True
+            else:
+                logging.error("分钟级天气数据写入MySQL失败")
+                return False
+        except Exception as e:
+            logging.error(f"MySQL写入失败: {e}")
+            return False
+
+    def save_hourly_forecast(self, forecast_data):
+        """将小时级天气数据写入MySQL"""
+        try:
+            if self.hourly_forecast_dao.insert(forecast_data):
+                logging.info("小时级天气数据已写入MySQL")
+                return True
+            else:
+                logging.error("小时级天气数据写入MySQL失败")
+                return False
+        except Exception as e:
+            logging.error(f"MySQL写入失败: {e}")
+            return False
+
+    def save_daily_forecast(self, forecast_data):
+        """将每日天气数据写入MySQL"""
+        try:
+            if self.daily_forecast_dao.insert(forecast_data):
+                logging.info("每日天气数据已写入MySQL")
+                return True
+            else:
+                logging.error("每日天气数据写入MySQL失败")
+                return False
+        except Exception as e:
+            logging.error(f"MySQL写入失败: {e}")
+            return False
+
+    def save_weather_alerts(self, alert_data):
+        """将天气警报数据写入MySQL"""
+        try:
+            if self.weather_alerts_dao.insert(alert_data):
+                logging.info("天气警报数据已写入MySQL")
+                return True
+            else:
+                logging.error("天气警报数据写入MySQL失败")
+                return False
+        except Exception as e:
+            logging.error(f"MySQL写入失败: {e}")
+            return False
